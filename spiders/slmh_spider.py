@@ -1,19 +1,46 @@
 import scrapy
 import os
 import urllib
+from urllib import parse
 import zlib
 import re
+import requests
 from scrapy_splash import SplashRequest
+from scrapy.http import HtmlResponse
 
 class slmh(scrapy.Spider):
     name = 'Cartoon'
+    global tagdoman
+    global document
+    tagdoman = 'http://www.chuixue.net'  # 主机名
+    # 吹雪搜索规则
+    # keyword 需经过 UrlEncode编码
+    keyword = input('请输入漫画名:')
+    r = requests.get('http://www.chuixue.net/e/search/?searchget=1&show=title,player,playadmin,pinyin&keyboard=' + parse.quote(keyword.encode('gb2312')))
+    body = r.text
+    response = HtmlResponse(url=r.url, body=body, encoding='utf-8')
+    items = response.css('.dmList ul li a.pic img::attr(alt)').extract()
+    if len(items) > 1:
+        for index in range(len(items)):
+            print('('+str(index)+') '+str(items[index])+'')
+        while True:
+            tag_index = input('请输入要下载的序号:')
+            if tag_index.isdigit() and int(tag_index) <= len(items):
+                real_link = response.css('.dmList ul li a.pic::attr(href)').extract()[int(tag_index)]  # 漫画列表页
+                Folder_name = response.css('.dmList ul li a.pic img::attr(alt)').extract()[int(tag_index)]  # 漫画名
+                break
 
-    start_urls = ['http://www.chuixue.net/manhua/20849/']  # 漫画列表页
+    else:
+        real_link = response.css('.dmList ul li a.pic::attr(href)').extract_first()  # 漫画列表页
+        Folder_name = response.css('.dmList ul li a.pic img::attr(alt)').extract_first()  # 漫画名
+
+    document = 'C:/scrapylearn/slmh/cartoon/'+Folder_name  # 设置漫画名为文件夹名
+    # document = input('请输入保存路径:')
+    start_urls = [''+tagdoman + real_link+'']  # 拼接完整漫画列表页
 
     def parse(self, response):
-        tagdoman = 'http://www.chuixue.net'  # 主机名
         itemslist = response.css('.plist ul li')  # 提取漫画目录
-
+        print(response)
         for items in itemslist:  # 循环获取每一条
             itemlink = tagdoman + items.css('a::attr(href)').extract_first()  # 章节链接
             yield SplashRequest(itemlink
@@ -21,8 +48,6 @@ class slmh(scrapy.Spider):
                                 , args={'wait': '0.5'}
                                 # ,endpoint='render.json'
                                 )
-
-
 
     def comics_parse(self, response):
         list_title = response.xpath("//h1/text()").extract_first()  # 翻页器
@@ -47,7 +72,8 @@ class slmh(scrapy.Spider):
         self.log('saving pic: ' + img_url)
 
         # 保存漫画的文件夹
-        document = 'C:/scrapylearn/slmh/cartoon/ccjs'
+        if not os.path.exists(document):
+            os.makedirs(document)
 
         # 每部漫画的文件名以标题命名
         comics_path = document + '/' + title
